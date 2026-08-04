@@ -4,13 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GreenCity - Akıllı Şehir Hava Kalitesi Paneli</title>
-    <!-- Tailwind CSS (Arayüz Tasarımı) -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Leaflet CSS & JS (Harita Kütüphanesi) -->
+    <!-- Leaflet CSS & JS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        #map { height: calc(100vh - 70px); }
+        #map { height: calc(100vh - 70px); cursor: crosshair; }
     </style>
 </head>
 <body class="bg-gray-900 text-white font-sans antialiased">
@@ -22,12 +22,15 @@
             <h1 class="text-xl font-bold tracking-wide text-emerald-400">GreenCity Platform</h1>
             <span class="text-xs bg-emerald-950 text-emerald-400 px-2.5 py-1 rounded-full border border-emerald-800 font-medium">Canlı PostGIS & AI Tahmin</span>
         </div>
-        <button onclick="fetchSensors()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm px-4 py-2 rounded-lg font-medium transition flex items-center gap-2">
-            🔄 Verileri Tazele
-        </button>
+        <div class="flex items-center gap-3">
+            <span class="text-xs text-gray-400 hidden sm:inline">💡 Haritaya tıklayarak yeni sensör ekleyebilirsiniz</span>
+            <button onclick="fetchSensors()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm px-4 py-2 rounded-lg font-medium transition flex items-center gap-2">
+                🔄 Verileri Tazele
+            </button>
+        </div>
     </header>
 
-    <!-- Ana İçerik (Sol Panel + Harita) -->
+    <!-- Ana İçerik -->
     <div class="flex flex-col md:flex-row h-[calc(100vh-70px)]">
         
         <!-- Sol Yan Panel (Sensör Listesi) -->
@@ -49,12 +52,57 @@
         </main>
     </div>
 
-    <!-- Harita ve API Mantığı -->
+    <!-- Yeni Sensör Ekleme Modalı (Modal UI) -->
+    <div id="sensor-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center hidden z-[9999]">
+        <div class="bg-gray-800 border border-gray-700 p-6 rounded-xl w-full max-w-md shadow-2xl">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-emerald-400 flex items-center gap-2">
+                    <span>📍</span> Yeni Sensör Ekle
+                </h3>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-white text-xl font-bold">&times;</button>
+            </div>
+            
+            <form id="add-sensor-form" onsubmit="saveSensor(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Sensör Adı</label>
+                    <input type="text" id="modal-sensor-name" required placeholder="Örn: Kızılay Park Sensörü" 
+                           class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Anlık AQI Değeri (0 - 500)</label>
+                    <input type="number" id="modal-aqi" min="0" max="500" required value="35" 
+                           class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 text-xs bg-gray-900 p-3 rounded-lg border border-gray-700/50">
+                    <div>
+                        <span class="text-gray-500 block">Enlem (Lat):</span>
+                        <span id="modal-lat" class="font-mono text-emerald-400">0.0000</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-500 block">Boylam (Lng):</span>
+                        <span id="modal-lng" class="font-mono text-emerald-400">0.0000</span>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="closeModal()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium transition">İptal</button>
+                    <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium transition">PostGIS'e Kaydet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- JS Kodları -->
     <script>
+        let selectedLat = null;
+        let selectedLng = null;
+
         // Ankara Merkezli Haritayı Başlat
         const map = L.map('map').setView([39.9208, 32.8541], 13);
 
-        // Koyu Tema Harita Katmanı (CartoDB Dark Matter)
+        // CartoDB Dark Matter Harita Katmanı
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             maxZoom: 19,
             attribution: '&copy; OpenStreetMap &copy; CARTO'
@@ -64,12 +112,57 @@
 
         // AQI Seviyesine Göre Renk Belirleme
         function getAqiColor(aqi) {
-            if (aqi <= 30) return '#10b981'; // Yeşil (Mükemmel)
-            if (aqi <= 50) return '#f59e0b'; // Sarı (İyi)
-            return '#ef4444'; // Kırmızı (Hassas/Riskli)
+            if (aqi <= 30) return '#10b981'; // Yeşil
+            if (aqi <= 50) return '#f59e0b'; // Sarı
+            return '#ef4444'; // Kırmızı
         }
 
-        // Backend API'den Sensör ve AI Tahmin Verilerini Çek
+        // 1. Haritada Tıklama Etkinliği (Click Event)
+        map.on('click', function(e) {
+            selectedLat = e.latlng.lat;
+            selectedLng = e.latlng.lng;
+            
+            document.getElementById('modal-lat').textContent = selectedLat.toFixed(4);
+            document.getElementById('modal-lng').textContent = selectedLng.toFixed(4);
+            document.getElementById('modal-sensor-name').value = '';
+            
+            document.getElementById('sensor-modal').classList.remove('hidden');
+        });
+
+        function closeModal() {
+            document.getElementById('sensor-modal').classList.add('hidden');
+        }
+
+        // 2. Yeni Sensörü POST İsteyi İle Kaydetme
+        async function saveSensor(e) {
+            e.preventDefault();
+            const sensorName = document.getElementById('modal-sensor-name').value;
+            const aqi = parseInt(document.getElementById('modal-aqi').value, 10);
+
+            try {
+                const res = await fetch('/api/sensors/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sensorName: sensorName,
+                        aqi: aqi,
+                        latitude: selectedLat,
+                        longitude: selectedLng
+                    })
+                });
+
+                if (res.ok) {
+                    closeModal();
+                    fetchSensors(); // Haritayı tazeleyip yeni sensörü göster
+                } else {
+                    alert("Sensör kaydedilirken bir hata oluştu.");
+                }
+            } catch (err) {
+                console.error("Sensör kaydetme hatası:", err);
+            }
+        }
+
+        // 3. Sensörleri Çek ve Göster
         async function fetchSensors() {
             try {
                 const res = await fetch('/api/sensors/');
@@ -82,7 +175,6 @@
                 sensors.forEach(sensor => {
                     const color = getAqiColor(sensor.aqi);
 
-                    // 1. Haritada Daire Pin (CircleMarker) Oluştur
                     const marker = L.circleMarker([sensor.lat, sensor.lng], {
                         color: color,
                         fillColor: color,
@@ -90,7 +182,6 @@
                         radius: 12
                     });
 
-                    // AI Tahmin Bilgisi Varsa Popup İçeriğini Hazırla
                     const pred = sensor.prediction || {};
                     const popupContent = `
                         <div class="p-2 text-gray-900 font-sans">
@@ -118,7 +209,6 @@
                     marker.bindPopup(popupContent);
                     markersLayer.addLayer(marker);
 
-                    // 2. Sol Panele Sensör Kartını Ekle
                     const card = document.createElement('div');
                     card.className = "p-3 bg-gray-700/60 hover:bg-gray-700 rounded-lg cursor-pointer transition border border-gray-600/50";
                     card.onclick = () => {
@@ -146,7 +236,6 @@
             }
         }
 
-        // Sayfa Yüklenince Verileri Getir
         fetchSensors();
     </script>
 </body>
