@@ -27,7 +27,7 @@ services:
     networks:
       - green-city-net
 
-  # 3. Auth Service (Yeni Eklenen Mikroservisimiz)
+  # 3. Auth Service
   auth-service:
     build:
       context: ./services/auth-service
@@ -39,7 +39,7 @@ services:
     networks:
       - green-city-net
 
-  # 4. Sensor Service (Yeni Eklenen Mikroservis)
+  # 4. Sensor Service
   sensor-service:
     build:
       context: ./services/sensor-service
@@ -55,7 +55,23 @@ services:
       - postgres-db
     networks:
       - green-city-net
-  # 4. Nginx API Gateway
+
+  # 5. Data Science & Yapay Zeka Servisi (FastAPI)
+  data-science-service:
+    build:
+      context: ./services/data-science-service
+    container_name: greencity-data-science
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+    depends_on:
+      - postgres-db
+    networks:
+      - green-city-net
+
+  # 6. Nginx API Gateway
   api-gateway:
     image: nginx:alpine
     container_name: greencity-gateway
@@ -68,6 +84,8 @@ services:
       - postgres-db
       - redis-cache
       - auth-service
+      - sensor-service
+      - data-science-service
     networks:
       - green-city-net
 
