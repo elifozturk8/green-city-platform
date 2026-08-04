@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # 1. PostgreSQL + PostGIS (Coğrafi/CBS Veri Tabanı)
+  # 1. PostgreSQL + PostGIS
   postgres-db:
     image: postgis/postgis:16-3.4
     container_name: greencity-postgres
@@ -17,7 +17,7 @@ services:
     networks:
       - green-city-net
 
-  # 2. Redis (Cache & Rate Limiting için)
+  # 2. Redis
   redis-cache:
     image: redis:7-alpine
     container_name: greencity-redis
@@ -27,7 +27,35 @@ services:
     networks:
       - green-city-net
 
-  # 3. Nginx API Gateway (Tüm trafiği karşılayacak)
+  # 3. Auth Service (Yeni Eklenen Mikroservisimiz)
+  auth-service:
+    build:
+      context: ./services/auth-service
+    container_name: greencity-auth
+    restart: always
+    environment:
+      PORT: 3000
+      JWT_SECRET: GreenCitySuperSecretKey2026!
+    networks:
+      - green-city-net
+
+  # 4. Sensor Service (Yeni Eklenen Mikroservis)
+  sensor-service:
+    build:
+      context: ./services/sensor-service
+    container_name: greencity-sensor
+    restart: always
+    environment:
+      PORT: 3001
+      POSTGRES_HOST: postgres-db
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      - postgres-db
+    networks:
+      - green-city-net
+  # 4. Nginx API Gateway
   api-gateway:
     image: nginx:alpine
     container_name: greencity-gateway
@@ -39,6 +67,7 @@ services:
     depends_on:
       - postgres-db
       - redis-cache
+      - auth-service
     networks:
       - green-city-net
 
