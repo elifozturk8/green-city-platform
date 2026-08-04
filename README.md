@@ -1,4 +1,3 @@
-Markdown
 # 🌍 GREEN-CITY: Akıllı Çevre İzleme & Kent Risk Yönetim Sistemi
 
 > **Kurumsal Mikroservis, Siber Dayanıklılık ve Sistem İzleme (DevOps) Staj Projesi**
@@ -9,13 +8,13 @@ Markdown
 
 **GREEN-CITY**, kent genelindeki hava kalitesi sensör verilerinin toplanması, kaçak atık/çevre kirliliği ihbarlarının coğrafi konum (CBS/GIS) bazlı yönetilmesi ve iklim riski analizlerinin yapıldığı **kurumsal düzeyde bir Çevre İzleme & Erken Uyarı Platformu** projesidir.
 
-Bu proje; mikroservis mimarisi, izole Docker ağları, PostGIS tabanlı coğrafi veri işleme, OWASP standartlarında siber güvenlik denetimleri ve Prometheus/Grafana/Loki ile uçtan uca sistem izleme (DevOps & SOC) süreçlerini kapsar.
+Bu proje; mikroservis mimarisi, izole Docker ağları, PostGIS tabanlı coğrafi veri işleme, OWASP standartlarında siber güvenlik denetimleri ve interaktif CBS (Leaflet.js) + Yapay Zeka (ML) tahmin paneli süreçlerini kapsar.
 
 ---
 
 ## 🏗️ Mimari ve Sistem Yapısı
 
-Proje, tüm servislerin izole bir Docker ağı (`green-city-net`) üzerinde haberleştiği, dış dünyanın ise sadece **API Gateway (Nginx)** üzerinden sisteme erişebildiği bir mikroservis mimarisine sahiptir.
+Proje, tüm servislerin izole bir Docker ağı (`green-city-net`) üzerinde haberleştiği, dış dünyadan erişimin ise sadece **API Gateway (Nginx)** üzerinden sağlandığı bir mikroservis mimarisine sahiptir.
 
 ```text
 [ İstemci / Web / Mobil ]
@@ -24,48 +23,57 @@ Proje, tüm servislerin izole bir Docker ağı (`green-city-net`) üzerinde habe
 ┌─────────────────────────────────────────────────────────┐
 │              API Gateway (Nginx / Docker)               │
 │  - Reverse Proxy & Port Mapping                         │
-│  - Rate Limiting (DoS Koruması)                         │
-│  - Dynamic Routing & Security Headers                   │
+│  - Static Dashboard Hosting (/usr/share/nginx/html)     │
+│  - Rate Limiting & Dynamic Routing                      │
 └──────────────────────────┬──────────────────────────────┘
                            │ (İç Ağ: green-city-net)
-     ┌─────────────────────┼─────────────────────┐
-     ▼                     ▼                     ▼
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│ Auth Service │    │ GIS & Sensor │    │ Analytics &  │
-│  (JWT / Auth)│    │   Service    │    │ Data Science │
-└──────┬───────┘    └──────┬───────┘    └──────────────┘
-       │                   │
-       ▼                   ▼
+        ┌──────────────────┼──────────────────┐
+        ▼                  ▼                  ▼
+┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+│ Auth Service │   │ Sensor & GIS │   │ Data Science │
+│   (Node.js)  │   │  (Node.js)   │   │  (FastAPI)   │
+└──────┬───────┘   └──────┬───────┘   └──────┬───────┘
+       │                  │                  │
+       │        ┌─────────┴──────────────────┘
+       │        │ (Service-to-Service ML Call)
+       ▼        ▼
 ┌─────────────────────────────────────────────────────────┐
 │              Veri Katmanı (Docker Inside)               │
-│  - PostgreSQL + PostGIS (Geospatial Veri)              │
-│  - Redis (Cache & Rate Limit Counter)                   │
+│  - PostgreSQL 16 + PostGIS (Geospatial Veri saklama)    │
+│  - Redis 7 (Cache & Rate Limit Counter)                 │
 └─────────────────────────────────────────────────────────┘
-🛠️ Kullanılan Teknolojiler
-Backend & API: Java / Spring Boot, Python, Nginx (API Gateway)
 
-Veri Tabanı & Önbellek: PostgreSQL (PostGIS Eklentisi), Redis
+🛠️ Kullanılan Teknolojiler
+Backend & API: Node.js (Express.js), Python (FastAPI), Nginx (API Gateway)
+
+Yapay Zeka & ML: Scikit-Learn (RandomForestRegressor), Pandas, NumPy, Joblib
+
+Veri Tabanı & Önbellek: PostgreSQL 16 (PostGIS Eklentisi), Redis 7
+
+Ön Yüz & CBS (GIS): HTML5, Tailwind CSS, Leaflet.js (CartoDB Dark Matter / OpenStreetMap)
 
 Konteynerleştirme & Orkestrasyon: Docker, Docker Compose, Docker Networks
 
-Siber Güvenlik & Test: OWASP ZAP, Burp Suite, SonarQube, JWT, Rate Limiting
+Siber Güvenlik & Test: OWASP ZAP, Burp Suite, JWT, Rate Limiting
 
-DevOps & İzleme (Monitoring): Prometheus, Grafana, Loki (Log Akışı), GitHub Actions (CI/CD)
+DevOps & İzleme: Prometheus, Grafana, Loki, GitHub Actions (CI/CD)
 
 📂 Proje Dizin Yapısı
-Plaintext
 green-city-platform/
 ├── docker/
 │   └── nginx/
-│       └── default.conf       # Gateway Reverse Proxy & Güvenlik Yapılandırması
+│       ├── default.conf         # Reverse Proxy & Routing Yapılandırması
+│       └── public/
+│           └── index.html       # Interaktif Leaflet Harita Paneli & UI
 ├── services/
-│   ├── auth-service/          # Kimlik Doğrulama & Yetkilendirme Servisi
-│   ├── sensor-service/        # CBS & Sensör Veri Yönetim Servisi
-│   └── data-science/          # Tahmin ve Analiz Modelleri (Python)
-├── .env                       # Ortam Değişkenleri (İzole/Gizli)
+│   ├── auth-service/            # Kimlik Doğrulama & JWT Servisi (Node.js)
+│   ├── sensor-service/          # PostGIS & Sensör Veri Yönetim Servisi (Node.js)
+│   └── data-science-service/    # ML Tahmin ve Analiz Servisi (FastAPI)
+├── .env                         # Ortam Değişkenleri (İzole/Gizli)
 ├── .gitignore
-├── docker-compose.yml         # Tüm Ekosistemi Ayağa Kaldıran Orkestratör
-└── README.md                  # Proje Dokümantasyonu
+├── docker-compose.yml           # Tüm Ekosistemi Ayağa Kaldıran Orkestratör
+└── README.md                    # Proje Dokümantasyonu
+
 🚀 Kurulum ve Çalıştırma
 Ön Gereksinimler
 Docker & Docker Compose
@@ -73,31 +81,27 @@ Docker & Docker Compose
 Git
 
 Adım Adım Kurulum
-Depoyu Klonlayın:
-
-Bash
+1-Depoyu Klonlayın:
 git clone [https://github.com/elifozturk8/green-city-platform.git](https://github.com/elifozturk8/green-city-platform.git)
 cd green-city-platform
-Ortam Değişkenlerini Tanımlayın:
-Proje kök dizininde bir .env dosyası oluşturun:
 
-Kod snippet'i
+2-Ortam Değişkenlerini Tanımlayın:
+Proje kök dizininde .env dosyasını kontrol edin/oluşturun:
 POSTGRES_DB=greencitydb
 POSTGRES_USER=greencity_admin
 POSTGRES_PASSWORD=SuperSecretPass123!
-POSTGRES_PORT=5433
+POSTGRES_PORT=5432
 REDIS_PORT=6379
-Sistemi Docker ile Ayağa Kaldırın:
 
-Bash
-docker compose up -d
-PostGIS Eklentisini Doğrulayın:
+3-Sistemi Docker ile Ayağa Kaldırın:
+docker compose up -d --build
 
-Bash
+4-PostGIS Eklentisini Doğrulayın:
 docker exec -it greencity-postgres psql -U greencity_admin -d greencitydb -c "CREATE EXTENSION IF NOT EXISTS postgis; SELECT PostGIS_Version();"
-Erişim:
 
-API Gateway: http://localhost:80
+5-Erişim Noktaları:
+-Canlı Harita Dashboard: http://localhost
+-FastAPI ML Swagger UI: http://localhost:5000/docs
 
 🛡️ Siber Güvenlik ve DevSecOps Sorumlulukları
 API Gateway Güvenliği: Brute-Force ve DoS/DDoS saldırılarına karşı API Gateway seviyesinde Rate Limiting kurallarının uygulanması.
@@ -111,34 +115,11 @@ Log İzleme (SOC): Sistemdeki şüpheli erişim ve güvenlik loglarının Loki v
 🗓️ 4 Haftalık Geliştirme Yol Haritası
 [x] 1. Hafta: Temel Mimarinin Kurulması, Gitflow Yapısı, PostgreSQL (PostGIS), Redis ve Nginx Gateway'in Dockerize Edilmesi.
 
-[ ] 2. Hafta: Auth Service (JWT) ve Sensor Service Modüllerinin Geliştirilmesi, API Gateway Rotalaması.
+[x] 2. Hafta: Auth Service (JWT) ve Sensor Service Modüllerinin Geliştirilmesi, API Gateway Rotalaması.
 
-[ ] 3. Hafta: Monitoring Katmanı (Prometheus, Grafana, Loki) Kurulumu ve OWASP Pentest Taramaları.
+[x] 3. Hafta: Python FastAPI ML Modelinin (Scikit-Learn) Eğitilmesi, Servisler Arası (Sensor <-> ML) Entegrasyon ve PostGIS Sorguları.
 
-[ ] 4. Hafta: CI/CD Boru Hattı Entegrasyonu, Dokümantasyon Tamamlama ve Final Sunumu.
+[x] 4. Hafta: Interaktif Leaflet Harita Dashboard'unun Yayına Alınması, Haritadan Tıklayarak Sensör Ekleme, CI/CD ve Final Dokümantasyonu.
 
 👤 Yazar
-Elif Öztürk - Siber Güvenlik & DevOps Uzmanı - GitHub Profilim
-
-
----
-
-### 📤 Güncellenmiş README'yi GitHub'a Gönderme
-
-Dosyayı kaydedip kapattıktan sonra PowerShell terminaline dönüp şu komutları sırasıyla çalıştır:
-
-```powershell
-# 1. README değişikliğini sahneye ekleyelim ve commitleyelim
-git add README.md
-git commit -m "docs: update README with full system architecture and setup guide"
-
-# 2. develop dalındaki bu güncellemeyi GitHub'a pushlayalım
-git push origin develop
-
-# 3. Güncellemeyi main dalına da aktaralım (Depo ana sayfasında görünmesi için)
-git checkout main
-git merge develop
-git push origin main
-
-# 4. Tekrar geliştirme dalımıza (develop) geri dönelim
-git checkout develop
+Elif Öztürk - Siber Güvenlik & DevOps Uzmanı- GitHub Profilim
